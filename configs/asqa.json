@@ -1,0 +1,5 @@
+{
+    "topk_retriever": 3,
+    "look_ahead_filter_prob": 0.8,
+    "look_ahead_mask_prob": 0.4
+}

@@ -1,0 +1,13 @@
+# Remove data sources
+data/
+dataset/
+*/datasets/
+
+# Ignore test files
+test.py
+patch.py
+patch2.py
+
+# Save only the final predictions
+outputs/*.json
+!final-predictions.json
