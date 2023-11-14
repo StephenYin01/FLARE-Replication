@@ -38,6 +38,14 @@ popd
 
 ### Build the ElasticSearch index
 
+(Instructions taken from [beir example](https://github.com/beir-cellar/beir/blob/main/examples/retrieval/evaluation/lexical/evaluate_bm25.py))
+
+To be able to run Elasticsearch, you should have it installed locally (on your desktop) along with ``pip install beir``. Depending on your OS, you would be able to find how to download Elasticsearch. I like this guide for Ubuntu 18.04 - https://linuxize.com/post/how-to-install-elasticsearch-on-ubuntu-18-04/ 
+
+For more details, please refer here - https://www.elastic.co/downloads/elasticsearch. 
+
+This code doesn't require GPU to run.
+
 Run the following command to build the ElasticSearch index
 
 ```
