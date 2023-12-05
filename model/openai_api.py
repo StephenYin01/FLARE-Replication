@@ -22,6 +22,7 @@ class QueryAgent(object):
         api_key (str): Your personal OpenAI API key
         retriever (BM25): Custom BM25 retriever
         dataset (Any): This stores the dataset we are working with, default ASQA
+        mode (str): Retrieval mode, FLARE direct implicit or FLARE direct explicit
         retrieval_kwargs (Dict[str, Any]): Hyperparameters of the model to tune
 
     Attributes:
@@ -37,6 +38,7 @@ class QueryAgent(object):
         topk_retriever (int): This stores the number of documents for the retriever to retrieve per call
         retriever (BM25): This stores the custom BM25 retriever
         dataset (Any): This stores the dataset we are working with, default ASQA
+        mode (str): This stores whether we are in FLARE direct implicit or FLARE direct explicit
 
     '''
     def __init__(
@@ -75,6 +77,9 @@ class QueryAgent(object):
 
         # Dataset
         self.dataset = dataset
+
+        # Mode
+        self.mode = retrieval_kwargs.get("mode", "implicit")
 
         # Track analytics 
         self._total_api_calls = 0
@@ -134,7 +139,7 @@ class QueryAgent(object):
         return self.normalize(list(responses))
 
     def _complete(self, texts):
-        '''Calls the Complete API once for an OpenAI API model
+        '''Calls the Complete API for an OpenAI API model
         
         Args:
             texts (List[str]): The texts for the model to complete
@@ -302,11 +307,17 @@ class QueryAgent(object):
             # If we generate a sentence that has low probability tokens, use retrieval and append documents to input + content generated thus far
             # Q: Where do we put exemplars in our response? A: Keep exemplars at the beginning and sandwich retrieved docs
             if sents[i] != "" and min(all_tok_probs[i]) < self.look_ahead_filter_prob:
-
-                # Implicity query by masking
-                _mask = np.array(all_tok_probs[i]) < self.look_ahead_mask_prob
-                query = np.where(_mask, "", all_toks[i])
-                query = "".join(query)
+                
+                if self.mode == "implicit":
+                    # Implicity query by masking
+                    _mask = np.array(all_tok_probs[i]) < self.look_ahead_mask_prob
+                    query = np.where(_mask, "", all_toks[i])
+                    query = "".join(query)
+                elif self.mode == "explicit":
+                    # Explicit query via LLM Query
+                    query = self._generate_query(user_inputs[i], responses[i]) 
+                else:
+                    raise Exception("Invalide retrieval mode! Acceptable modes: 'implicit', 'explicit'")
 
                 # Remove whitespace in beginning of query
                 query = query.lstrip()
@@ -319,10 +330,11 @@ class QueryAgent(object):
                 self._total_retrieval_calls += 1
                 self._total_api_calls -= 1 # or else API Calls double counted from self._complete below
                 
-                _mask2 = np.array(all_tok_probs[i]) < self.look_ahead_filter_prob
-                self._masked_tokens.update(np.array(all_toks[i])[_mask])
-                self._low_probability_tokens.update(np.array(all_toks[i])[_mask2])
+                if self.mode == "implicit":
+                    self._masked_tokens.update(np.array(all_toks[i])[_mask])
 
+                _mask2 = np.array(all_tok_probs[i]) < self.look_ahead_filter_prob
+                self._low_probability_tokens.update(np.array(all_toks[i])[_mask2])
 
             else:
                 next_sents.append(sents[i])
@@ -346,6 +358,40 @@ class QueryAgent(object):
         responses = np.char.add(responses, next_sents)
 
         return responses
+
+    def _generate_query(self, user_input, response):
+        '''Generates an explicit query for the retriever from content generated thus far
+
+        Ex.
+        {USER INPUT}
+        {CURRENT RESPONSE}
+
+        Let's verify the truthfulness of the last sentence in the passage above. Given the above passage, state a search query to verify the factuality of the last sentence in the passage above.
+        or
+        Given the above passage, ask a question to verify the truthfulness of the last sentence in the passage.
+
+        Args:
+            user_input (str): The user input
+            response (str): The response generated thus far for the user input, including the sentence to regenerate
+
+        Returns:
+            query (str): The query to be passed to the retriever
+        '''
+
+        context = user_input + "\n" + response.lstrip()
+        
+        response = openai.Completion.create(
+            model="gpt-3.5-turbo-instruct",
+            prompt=[f"{context}\n\nLet's verify the truthfulness of the last sentence in the passage above. Given the above passage, state a search query to verify the factuality of the last sentence in the passage above."],
+            temperature=0,
+            max_tokens=64,
+            top_p=1,
+            logprobs=0
+        )
+
+        query = response['choices'][0]['text'].replace('"', "")
+
+        return query
 
     def normalize(self, responses):
         '''Normalizes the output of the model

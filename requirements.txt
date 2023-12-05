@@ -14,3 +14,6 @@ sentencepiece==0.1.98
 filelock
 tenacity
 spacy==3.5.0
+matplotlib==3.8.2
+seaborn==0.13.0
+wordcloud==1.9.2

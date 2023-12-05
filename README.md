@@ -63,11 +63,11 @@ __⚠️WARNING⚠️: Running the model makes many queries to the OpenAI API, w
 Run the following command to generate results on the selected test set
 
 ``` 
-python model/flare.py
+python model/flare.py -d {DATASET (ASQA 500 examples or ASQA_mini 50 examples)} -n {NAME_OF_EXPERIMENT}
 ```
 
-The results should be saved in ```outputs/{EXP_NAME_DEFINED_IN_FLARE.PY}.json```
-
+The results should be saved in ```outputs/{NAME_OF_EXPERIMENT}.json```
+The data analysis should be saved in ```outputs/{NAME_OF_EXPERIMENT-analytics}.json```
 
 ### Evaluate the results
 

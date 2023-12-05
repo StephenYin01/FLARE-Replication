@@ -6,6 +6,7 @@ dataset/
 
 # Ignore test files
 test.py
+test.ipynb
 patch.py
 patch2.py
 
