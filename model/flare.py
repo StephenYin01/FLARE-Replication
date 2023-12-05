@@ -1,13 +1,20 @@
 import os
 import json
+import math
+import argparse
 
 from openai_api import QueryAgent
-
-EXP_NAME = "final-predictions"
 
 if __name__ == "__main__":
 
     cur_path = os.path.abspath(os.curdir)
+
+    # Read the arguments
+    parser = argparse.ArgumentParser(description="Define experiment")
+    parse.add_argument("-d", "--dataset", type=str, default="ASQA", help="Name of ASQA dev dataset")
+    parse.add_argument("-n", "--name", type=str, default="final-predictions", help="Name of the experiment")
+    # Parse the arguments
+    args = parser.parse_args()
 
     # Retrieve the API key saved in environment
     api_key = os.getenv("OPENAI_API_KEY")
@@ -23,19 +30,17 @@ if __name__ == "__main__":
         )
 
     # Retrieve the evaluation questions
-    with open(cur_path + "/dataset/ASQA.json", 'r') as f:
+    with open(cur_path + f"/dataset/{args.dataset}.json", 'r') as f:
 
         questions = json.load(f)
         questions = questions['dev']
 
-    assert(len(questions) == 500)
-
     # Gather predictions
+    num_qs = len(questions)
     batch_size = 20
     batch_num = 0
     count = 0
     predictions = dict()
-    print(f"Batch Size: {batch_size}")
 
     batch_keys = []
     batch_questions = []
@@ -48,10 +53,10 @@ if __name__ == "__main__":
 
         count += 1
 
-        if count == batch_size:
+        if count % batch_size == 0 or count == num_qs:
             # Track batch num
             batch_num += 1
-            print(f"Batch {batch_num} / {500/batch_size}")
+            print(f"Batch {batch_num} / {math.ceil(num_qs/batch_size)}, Size: {count - batch_size * (batch_num - 1)}")
 
             # Query the agent
             batch_responses = qa.respond(batch_questions)
@@ -64,9 +69,8 @@ if __name__ == "__main__":
             batch_keys = []
             batch_questions = []
             batch_responses = []
-            count = 0
 
-    with open(cur_path + f"/outputs/{EXP_NAME}.json", 'w') as f:
+    with open(cur_path + f"/outputs/{args.name}.json", 'w') as f:
 
         json.dump(predictions, f)
     
