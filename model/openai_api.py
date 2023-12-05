@@ -1,10 +1,11 @@
 from typing import List, Dict, Any, Tuple, Union, Set
 import os
+import json
 import openai
 import numpy as np
 
 from nltk.tokenize.punkt import PunktSentenceTokenizer
-from collections import namedtuple
+from collections import namedtuple, Counter
 
 from retriever import BM25
 from asqa import ASQA
@@ -75,6 +76,12 @@ class QueryAgent(object):
         # Dataset
         self.dataset = dataset
 
+        # Track analytics 
+        self._total_api_calls = 0
+        self._total_retrieval_calls = 0
+        self._low_probability_tokens = Counter()
+        self._masked_tokens = Counter()
+
     def respond(
         self,
         user_inputs: List[str] = None,
@@ -115,12 +122,13 @@ class QueryAgent(object):
             next_sents, all_tok_probs, all_toks = self._complete(next_inputs)
             
             if next_sents == ["" for _ in range(bs)]:
+                self._total_api_calls -= bs
                 break
 
             # Update the responses through one iteration of active retrieval
             responses = self._iterative_generate(user_inputs, responses, next_sents, all_tok_probs, all_toks)
 
-            if SAFEGUARD_SENTINEL > 10:
+            if SAFEGUARD_SENTINEL > 15:
                 break
 
         return self.normalize(list(responses))
@@ -189,6 +197,9 @@ class QueryAgent(object):
                 completions.append(completion)
                 all_tok_probs.append(tok_probs[:trunc_at])
                 all_toks.append(toks[:trunc_at])
+
+                # ANALYTICS
+                self._total_api_calls += 1
 
         return completions, all_tok_probs, all_toks
 
@@ -289,7 +300,7 @@ class QueryAgent(object):
         for i in range(bs):
 
             # If we generate a sentence that has low probability tokens, use retrieval and append documents to input + content generated thus far
-            # Q: Where do we put exemplars in our response? A: Just assume that the exemplars disappear?
+            # Q: Where do we put exemplars in our response? A: Keep exemplars at the beginning and sandwich retrieved docs
             if sents[i] != "" and min(all_tok_probs[i]) < self.look_ahead_filter_prob:
 
                 # Implicity query by masking
@@ -303,6 +314,15 @@ class QueryAgent(object):
                 queries.append(query)
                 activated_idxs.append(i)
                 next_sents.append("")
+
+                # ANALYTICS
+                self._total_retrieval_calls += 1
+                self._total_api_calls -= 1 # or else API Calls double counted from self._complete below
+                
+                _mask2 = np.array(all_tok_probs[i]) < self.look_ahead_filter_prob
+                self._masked_tokens.update(np.array(all_toks[i])[_mask])
+                self._low_probability_tokens.update(np.array(all_toks[i])[_mask2])
+
 
             else:
                 next_sents.append(sents[i])
@@ -341,3 +361,45 @@ class QueryAgent(object):
         normalized = [x.lower().lstrip() for x in responses]
 
         return normalized
+
+    def _display_analytics(self):
+        '''Displays analytics of the model
+
+        Args:
+            None
+        
+        Returns:
+            None
+        '''
+
+        # Print 
+        print(f"Total API calls: {self._total_api_calls}")
+        print(f"Total Retrievals: {self._total_retrieval_calls}")
+        print(f"Retrieval Rate: {self._total_retrieval_calls/self._total_api_calls}")
+        print('─' * 20)
+        print(f"Most common low probability tokens: {self._low_probability_tokens.most_common(10)}")
+        print(f"Most common masked tokens for implicit retrieval: {self._masked_tokens.most_common(10)}")
+        print(f"Total num low probability tokens: {self._low_probability_tokens.total()}")
+        print(f"Total num masked tokens for implicit retrieval: {self._masked_tokens.total()}")
+
+    def _save_analytics(self, path):
+        '''Save model analytics to the specified path
+
+        Args:
+            path (str): The path to save analytics of model to
+
+        Returns:
+            None
+        '''
+
+        cur_path = os.path.abspath(os.curdir)
+
+        data = {
+            "api_calls": self._total_api_calls,
+            "retrieval_calls": self._total_retrieval_calls,
+            "low_prob_toks": self._low_probability_tokens,
+            "low_masked_toks": self._masked_tokens,
+        }
+
+        with open(cur_path + path, 'w') as f:
+            json.dump(data, f)

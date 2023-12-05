@@ -11,8 +11,8 @@ if __name__ == "__main__":
 
     # Read the arguments
     parser = argparse.ArgumentParser(description="Define experiment")
-    parse.add_argument("-d", "--dataset", type=str, default="ASQA", help="Name of ASQA dev dataset")
-    parse.add_argument("-n", "--name", type=str, default="final-predictions", help="Name of the experiment")
+    parser.add_argument("-d", "--dataset", type=str, default="ASQA", help="Name of ASQA dev dataset")
+    parser.add_argument("-n", "--name", type=str, default="final-predictions", help="Name of the experiment")
     # Parse the arguments
     args = parser.parse_args()
 
@@ -56,13 +56,14 @@ if __name__ == "__main__":
         if count % batch_size == 0 or count == num_qs:
             # Track batch num
             batch_num += 1
-            print(f"Batch {batch_num} / {math.ceil(num_qs/batch_size)}, Size: {count - batch_size * (batch_num - 1)}")
+            bs = count - batch_size * (batch_num - 1)
+            print(f"Batch {batch_num} / {math.ceil(num_qs/batch_size)}, Size: {bs}")
 
             # Query the agent
             batch_responses = qa.respond(batch_questions)
 
             # Save the results
-            for i in range(batch_size):
+            for i in range(bs):
                 predictions[batch_keys[i]] = batch_responses[i]
 
             # Reset batch variables
@@ -73,4 +74,7 @@ if __name__ == "__main__":
     with open(cur_path + f"/outputs/{args.name}.json", 'w') as f:
 
         json.dump(predictions, f)
+
+    # Save analytics
+    qa._save_analytics(f"/outputs/{args.name}-analytics.json")
     

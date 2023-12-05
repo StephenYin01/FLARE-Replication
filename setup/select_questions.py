@@ -13,7 +13,7 @@ with open(file, 'r') as f:
 sizes = [500, 50]
 names = ["ASQA", "ASQA_mini"]
 
-for i in len(sizes):
+for i in range(len(sizes)):
     # Exemplars are all in train set, so no need to worry about exemplars including test and contaminating results
     questions = random.sample(sorted(asqa['dev']), k=sizes[i])
 
